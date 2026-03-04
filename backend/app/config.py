@@ -8,8 +8,22 @@ class Settings(BaseSettings):
     supabase_key: str
     supabase_service_key: str
 
-    # OpenAI
-    openai_api_key: str
+    # OpenRouter — LLM chat completions
+    openrouter_api_key: str
+    openrouter_api_base: str = "https://openrouter.ai/api/v1"
+    llm_model: str = "openai/gpt-4o"
+
+    # OpenAI direct — for Whisper STT, TTS, and Realtime API
+    openai_api_key: str = ""
+
+    # Deepgram — STT (Nova-2)
+    deepgram_api_key: str = ""
+
+    # ElevenLabs — TTS
+    elevenlabs_api_key: str = ""
+    elevenlabs_voice_id: str = "cgSgspJ2msm6clMCkdW9"
+    voice_id_female: str = "cgSgspJ2msm6clMCkdW9"
+    voice_id_male: str = "ZoiZ8fuDWInAcwPXaVeq"
 
     # Weather
     openweather_api_key: str = ""
@@ -20,6 +34,9 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     email_from: str = ""
+
+    # LangGraph checkpointer — direct PostgreSQL connection string
+    supabase_db_url: str = ""
 
     # Auth
     jwt_secret: str = "dev-secret-change-me"

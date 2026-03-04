@@ -150,15 +150,22 @@ class FormSession:
             elif not meta["auto"]:
                 missing.append({"field": name, "label": meta["label"], "required": meta["required"]})
         complete = self.is_complete()
+
+        total_required = len([k for k, m in self.field_defs.items() if not m["auto"] and m["required"]])
+        filled_required = len([k for k, m in self.field_defs.items() if not m["auto"] and m["required"] and self.fields.get(k)])
+        completion = round((filled_required / total_required) * 100) if total_required else 0
+
         result = {
             "form_type": self.form_type,
             "draft_id": self.draft_id,
             "filled": filled,
             "missing": missing,
             "ready_to_submit": complete,
+            "completion": completion,
+            "status": "Ready to Submit" if complete else "Draft",
         }
         if complete:
-            result["instruction"] = "ALL required fields are filled. You MUST now show a summary of the filled fields and ask the user: 'Should I submit this form?' Wait for their confirmation before calling submit_form."
+            result["instruction"] = "ALL required fields are filled. Call get_form_status to show the summary card, then ask: 'Want me to submit and send it to your supervisor?' Wait for confirmation before calling submit_form."
         return result
 
     def is_complete(self) -> bool:

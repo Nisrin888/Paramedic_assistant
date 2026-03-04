@@ -1,7 +1,7 @@
 """
 OpenAI Realtime API WebSocket proxy.
 
-Client (React Native) ↔ Our Backend ↔ OpenAI Realtime API
+Client (React Native) <-> Our Backend <-> OpenAI Realtime API
 
 The backend:
   - Authenticates the user
@@ -10,6 +10,9 @@ The backend:
   - Forwards audio bidirectionally
   - Intercepts function calls to execute our tools (form filling, status, etc.)
   - Returns tool results to OpenAI so it continues the conversation
+
+Tool execution is shared with the LangGraph text-chat agent via
+langgraph_tools.execute_tool() — no duplicated logic.
 """
 import asyncio
 import json
@@ -21,22 +24,9 @@ import websockets
 
 from app.config import get_settings
 from app.database import get_supabase
-from app.agents.form_agent import (
-    FormSession,
-    create_draft,
-    update_draft,
-    submit_form as submit_form_db,
-)
-from app.agents.checklist_agent import get_status_check
-from app.agents.shift_agent import get_shift_info, get_outstanding_items
-from app.agents.supervisor_agent import (
-    get_team_overview,
-    get_submitted_reports,
-    review_report,
-    get_team_compliance,
-    get_shift_summary,
-    get_team_insights,
-)
+from app.agents.langgraph_tools import execute_tool
+from app.agents.prompts import build_realtime_instructions
+from app.agents.state import serialize_form_session
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["realtime"])
@@ -51,50 +41,14 @@ REALTIME_VOICE_MAP = {
 
 
 def _build_realtime_tools(role: str) -> list:
-    """Build tool definitions in Realtime API format (same as Chat Completions)."""
+    """Build tool definitions in Realtime API format (needs 'type' at top level)."""
     if role == "Supervisor":
         from app.agents.tools import SUPERVISOR_TOOLS
-        return [t["function"] for t in SUPERVISOR_TOOLS]
-    from app.agents.tools import PARAMEDIC_TOOLS
-    return [t["function"] for t in PARAMEDIC_TOOLS]
-
-
-def _build_instructions(user_context: dict) -> str:
-    """Build persona-aware instructions for the Realtime session."""
-    name = user_context.get("preferred_name") or user_context.get("first_name", "there")
-    role = user_context.get("role_type", "Paramedic")
-    style = user_context.get("speaking_style", "Friendly")
-
-    style_map = {
-        "Professional": "Speak in a professional, formal tone.",
-        "Casual": "Speak casually and conversationally.",
-        "Concise": "Keep responses very short. Minimal words.",
-        "Friendly": "Speak in a warm, friendly, and supportive tone.",
-    }
-
-    if role == "Supervisor":
-        return f"""You are the Paramedic AI Assistant — Supervisor Dashboard.
-You are speaking with {name}, a supervisor.
-{style_map.get(style, style_map['Professional'])}
-Help them review team reports, check compliance, and get shift summaries.
-When they ask about their team, use the appropriate tool.
-Be concise in voice — short sentences work better for speech."""
-
-    return f"""You are the Paramedic AI Assistant for EMS documentation.
-You are speaking with {name}, a paramedic.
-{style_map.get(style, style_map['Friendly'])}
-
-Your job:
-- Help fill Occurrence Reports when they describe incidents
-- Help fill Teddy Bear forms when they mention giving a teddy bear
-- Check Form 4 status when asked about readiness
-- Provide shift and partner info
-
-When {name} describes an event, use the right tool to start a form.
-Auto-filled fields (badge, name, vehicle, time) are handled — don't ask for them.
-Only ask about fields the user must provide.
-When all required fields are filled, summarize and ask to confirm before submitting.
-Keep responses SHORT for voice — 1-2 sentences max. This is a voice conversation."""
+        tools = SUPERVISOR_TOOLS
+    else:
+        from app.agents.tools import PARAMEDIC_TOOLS
+        tools = PARAMEDIC_TOOLS
+    return [{"type": "function", **t["function"]} for t in tools]
 
 
 async def _authenticate_ws(websocket: WebSocket) -> dict | None:
@@ -141,6 +95,7 @@ async def _authenticate_ws(websocket: WebSocket) -> dict | None:
             "supervisor_id": supervisor.get("supervisor_id"),
         })
     else:
+        from app.agents.shift_agent import get_shift_info
         para_result = db.table("paramedics").select("*").eq("user_id", user_id).execute()
         paramedic = para_result.data[0] if para_result.data else {}
         shift_info = await get_shift_info(paramedic.get("paramedic_id", ""))
@@ -161,84 +116,9 @@ async def _authenticate_ws(websocket: WebSocket) -> dict | None:
     return context
 
 
-async def _execute_tool(fn_name: str, fn_args: dict, user_context: dict, form_session: FormSession | None) -> tuple[dict, FormSession | None]:
-    """Execute a tool call. Returns (result_dict, updated_form_session)."""
-
-    if fn_name == "start_occurrence_report":
-        form_session = FormSession("occurrence", user_context)
-        for k, v in fn_args.items():
-            form_session.update_field(k, v)
-        await create_draft(form_session)
-        return form_session.get_status(), form_session
-
-    elif fn_name == "start_teddy_bear_form":
-        form_session = FormSession("teddy_bear", user_context)
-        for k, v in fn_args.items():
-            form_session.update_field(k, v)
-        await create_draft(form_session)
-        return form_session.get_status(), form_session
-
-    elif fn_name == "update_form_field":
-        if form_session:
-            form_session.update_field(fn_args.get("field_name", ""), fn_args.get("field_value", ""))
-            await update_draft(form_session)
-            return form_session.get_status(), form_session
-        return {"error": "No form in progress"}, form_session
-
-    elif fn_name == "get_form_status":
-        if form_session:
-            return form_session.get_status(), form_session
-        return {"error": "No form in progress"}, form_session
-
-    elif fn_name == "submit_form":
-        if not form_session:
-            return {"error": "No form in progress"}, form_session
-        if not form_session.is_complete():
-            return {"error": f"Missing required fields: {form_session.get_missing_required()}"}, form_session
-        saved = await submit_form_db(form_session)
-        return {"success": True, "record": saved}, None
-
-    elif fn_name == "get_status_check":
-        return await get_status_check(user_context["user_id"]), form_session
-
-    elif fn_name == "get_shift_info":
-        return await get_shift_info(user_context.get("paramedic_id", "")), form_session
-
-    elif fn_name == "get_outstanding_items":
-        return await get_outstanding_items(user_context["user_id"]), form_session
-
-    elif fn_name == "save_for_later":
-        db = get_supabase()
-        db.table("outstanding_items").insert({
-            "user_id": user_context["user_id"],
-            "shift_id": user_context.get("shift_id"),
-            "title": fn_args.get("title", "Saved draft"),
-            "category": "form",
-            "priority": "medium",
-            "status": "pending",
-        }).execute()
-        return {"success": True}, None
-
-    # Supervisor tools
-    elif fn_name == "get_team_overview":
-        return await get_team_overview(user_context["supervisor_id"]), form_session
-    elif fn_name == "get_submitted_reports":
-        return await get_submitted_reports(user_context["supervisor_id"], fn_args.get("paramedic_name"), fn_args.get("status_filter", "Submitted")), form_session
-    elif fn_name == "review_report":
-        return await review_report(fn_args["report_id"], fn_args.get("management_notes")), form_session
-    elif fn_name == "get_team_compliance":
-        return await get_team_compliance(user_context["supervisor_id"]), form_session
-    elif fn_name == "get_shift_summary":
-        return await get_shift_summary(user_context["supervisor_id"], fn_args.get("shift_id")), form_session
-    elif fn_name == "get_team_insights":
-        return await get_team_insights(user_context["supervisor_id"]), form_session
-
-    return {"error": f"Unknown tool: {fn_name}"}, form_session
-
-
 @router.websocket("/realtime/chat")
 async def realtime_chat(websocket: WebSocket):
-    """WebSocket proxy: Client ↔ Backend ↔ OpenAI Realtime API."""
+    """WebSocket proxy: Client <-> Backend <-> OpenAI Realtime API."""
     await websocket.accept()
 
     # Authenticate
@@ -250,14 +130,19 @@ async def realtime_chat(websocket: WebSocket):
 
     settings = get_settings()
     voice = REALTIME_VOICE_MAP.get(user_context.get("voice_preference", "Female"), "shimmer")
-    form_session: FormSession | None = None
+
+    # Mutable state for form tracking across tool calls
+    form_session_data: dict | None = None
+    last_submitted_id: str | None = None
+    last_submitted_type: str | None = None
 
     # Connect to OpenAI Realtime API
     try:
+        realtime_key = settings.openai_api_key
         openai_ws = await websockets.connect(
             OPENAI_REALTIME_URL,
             additional_headers={
-                "Authorization": f"Bearer {settings.openai_api_key}",
+                "Authorization": f"Bearer {realtime_key}",
                 "OpenAI-Beta": "realtime=v1",
             },
             ping_interval=30,
@@ -271,11 +156,11 @@ async def realtime_chat(websocket: WebSocket):
 
     print(f"[REALTIME] Connected to OpenAI Realtime API for {user_context.get('first_name')}")
 
-    # Configure the session
+    # Configure the session — use shared prompt builder
     session_config = {
         "type": "session.update",
         "session": {
-            "instructions": _build_instructions(user_context),
+            "instructions": build_realtime_instructions(user_context),
             "tools": _build_realtime_tools(user_context.get("role_type", "Paramedic")),
             "input_audio_transcription": {"model": "whisper-1"},
             "turn_detection": {
@@ -297,7 +182,6 @@ async def realtime_chat(websocket: WebSocket):
 
     async def forward_client_to_openai():
         """Forward audio/events from client to OpenAI."""
-        nonlocal form_session
         try:
             while True:
                 raw = await websocket.receive_text()
@@ -335,11 +219,11 @@ async def realtime_chat(websocket: WebSocket):
         except WebSocketDisconnect:
             pass
         except Exception as e:
-            print(f"[REALTIME] Client→OpenAI error: {e}")
+            print(f"[REALTIME] Client->OpenAI error: {e}")
 
     async def forward_openai_to_client():
         """Forward events from OpenAI to client, intercepting function calls."""
-        nonlocal form_session
+        nonlocal form_session_data, last_submitted_id, last_submitted_type
         try:
             async for raw_msg in openai_ws:
                 event = json.loads(raw_msg)
@@ -380,7 +264,7 @@ async def realtime_chat(websocket: WebSocket):
                         pending_calls[call_id] = {"name": "", "arguments_str": ""}
                     pending_calls[call_id]["arguments_str"] += event.get("delta", "")
 
-                # Function call complete — execute our tool
+                # Function call complete — execute via shared dispatcher
                 elif event_type == "response.function_call_arguments.done":
                     call_id = event.get("call_id", "")
                     fn_name = event.get("name", "")
@@ -393,14 +277,27 @@ async def realtime_chat(websocket: WebSocket):
                     except json.JSONDecodeError:
                         fn_args = {}
 
+                    # Use the shared execute_tool dispatcher
                     try:
-                        result, form_session = await _execute_tool(fn_name, fn_args, user_context, form_session)
+                        result = await execute_tool(
+                            fn_name, fn_args, user_context,
+                            form_session_data, last_submitted_id, last_submitted_type,
+                        )
                     except Exception as e:
                         print(f"[REALTIME] Tool {fn_name} failed: {e}")
                         traceback.print_exc()
-                        result = {"error": str(e)}
+                        result = {"tool_result": {"error": str(e)}}
 
-                    result_str = json.dumps(result, default=str)
+                    # Update local state from result
+                    if "form_session_data" in result:
+                        form_session_data = result["form_session_data"]
+                    if "last_submitted_id" in result:
+                        last_submitted_id = result["last_submitted_id"]
+                    if "last_submitted_type" in result:
+                        last_submitted_type = result["last_submitted_type"]
+
+                    tool_result = result.get("tool_result", {})
+                    result_str = json.dumps(tool_result, default=str)
 
                     # Send tool result back to OpenAI
                     await openai_ws.send(json.dumps({
@@ -415,11 +312,13 @@ async def realtime_chat(websocket: WebSocket):
                     await openai_ws.send(json.dumps({"type": "response.create"}))
 
                     # Notify client about the action
-                    action = "form_update" if "form_type" in result else fn_name
+                    action = result.get("action")
+                    if not action:
+                        action = "form_update" if "form_type" in tool_result else fn_name
                     await websocket.send_json({
                         "type": "action",
                         "action": action,
-                        "data": result,
+                        "data": tool_result,
                     })
 
                     # Clean up
@@ -444,7 +343,7 @@ async def realtime_chat(websocket: WebSocket):
         except websockets.exceptions.ConnectionClosed:
             pass
         except Exception as e:
-            print(f"[REALTIME] OpenAI→Client error: {e}")
+            print(f"[REALTIME] OpenAI->Client error: {e}")
             traceback.print_exc()
 
     # Run both directions concurrently

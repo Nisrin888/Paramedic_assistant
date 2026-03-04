@@ -154,12 +154,12 @@ def seed():
     db.table("user_personas").upsert(personas, on_conflict="persona_id").execute()
     print(f"  Seeded {len(personas)} personas")
 
-    # ── Form4 Reference Items ──────────────────────────────
+    # ── Form4 Reference Items (matches Rev 20260225 compliance form) ──
     form4_items = [
         {
             "id": "ACRc",
             "label": "ACR Completion",
-            "description": "Ambulance Call Report must be completed within 24 hours of call completion.",
+            "description": "Number of ACRs/PCRs that are unfinished. Each must be completed within 24 hours of call completion.",
             "urgency_class": "BLOCKING",
             "guidance_summary": "Complete all fields on the ACR for each patient contact.",
             "guidance_steps": [
@@ -171,39 +171,49 @@ def seed():
             ],
         },
         {
-            "id": "VEHi",
-            "label": "Vehicle Inspection",
-            "description": "Daily vehicle and equipment inspection must be performed at shift start.",
-            "urgency_class": "BLOCKING",
-            "guidance_summary": "Walk around the vehicle and verify all equipment is present and functional.",
-            "guidance_steps": [
-                "Check exterior lights and sirens",
-                "Verify tire condition and pressure",
-                "Inspect interior medical equipment",
-                "Check oxygen levels and suction",
-                "Test defibrillator and monitor",
-                "Sign off on inspection form",
-            ],
-        },
-        {
-            "id": "NAR",
-            "label": "Narcotics Count",
-            "description": "Controlled substance count must match records at shift start and end.",
-            "urgency_class": "BLOCKING",
-            "guidance_summary": "Count and verify all narcotics against the log.",
-            "guidance_steps": [
-                "Open the narcotics safe",
-                "Count each medication against the log",
-                "Note any discrepancies immediately",
-                "Both medics must sign off",
-            ],
-        },
-        {
-            "id": "CEd",
-            "label": "Continuing Education",
-            "description": "Track required CE hours for license renewal.",
+            "id": "ACEr",
+            "label": "ACE Response",
+            "description": "Number of ACE reviews requiring comment. Complete outstanding within 1 week of BH review.",
             "urgency_class": "TIME_BOUND",
-            "guidance_summary": "Ensure CE hours are on track for the renewal period.",
+            "guidance_summary": "Review and respond to all outstanding ACE evaluations.",
+            "guidance_steps": [
+                "Open the ACE review portal",
+                "Read the reviewer comments",
+                "Provide your response or acknowledgement",
+                "Submit within 1 week of BH review date",
+            ],
+        },
+        {
+            "id": "CERT-DL",
+            "label": "Drivers License",
+            "description": "Drivers License Validity. Must be current and valid.",
+            "urgency_class": "BLOCKING",
+            "guidance_summary": "Ensure your drivers license is valid and not expired.",
+            "guidance_steps": [
+                "Check license expiry date",
+                "Renew before expiration if needed",
+                "Submit updated copy to HR",
+            ],
+        },
+        {
+            "id": "CERT-Va",
+            "label": "Vaccinations",
+            "description": "Required vaccinations up to date. Vaccination status as per guidelines.",
+            "urgency_class": "BLOCKING",
+            "guidance_summary": "Keep all required vaccinations current per health authority guidelines.",
+            "guidance_steps": [
+                "Check vaccination records",
+                "Identify any overdue or upcoming vaccinations",
+                "Schedule appointments as needed",
+                "Submit proof of vaccination to HR",
+            ],
+        },
+        {
+            "id": "CERT-CE",
+            "label": "Education",
+            "description": "Continuous Education Status. CME credits outstanding.",
+            "urgency_class": "TIME_BOUND",
+            "guidance_summary": "Ensure CE/CME hours are on track for the renewal period.",
             "guidance_steps": [
                 "Check current CE hours logged",
                 "Identify any gaps in required categories",
@@ -211,28 +221,112 @@ def seed():
             ],
         },
         {
-            "id": "UNIf",
-            "label": "Uniform Compliance",
-            "description": "Verify proper uniform and PPE at shift start.",
+            "id": "UNIF",
+            "label": "Uniform",
+            "description": "Uniform credits. Available uniform order credits.",
             "urgency_class": "INFO",
-            "guidance_summary": "Ensure all required uniform items and PPE are present.",
+            "guidance_summary": "Track and use available uniform order credits.",
             "guidance_steps": [
-                "Check uniform is clean and complete",
-                "Verify ID badge is visible",
-                "Confirm PPE availability (gloves, mask, eye protection)",
+                "Check current uniform credit balance",
+                "Place orders for needed uniform items",
+                "Verify ID badge is visible and current",
+            ],
+        },
+        {
+            "id": "CRIM",
+            "label": "CRC",
+            "description": "Criminal Record Check. Must be issue free.",
+            "urgency_class": "BLOCKING",
+            "guidance_summary": "Maintain a current and clear criminal record check.",
+            "guidance_steps": [
+                "Verify CRC is current (not expired)",
+                "Submit renewal if nearing expiry",
+                "Report any changes to HR immediately",
+            ],
+        },
+        {
+            "id": "ACP",
+            "label": "ACP Status",
+            "description": "If ACP, Cert Valid. ACP Status is good if ACP certified.",
+            "urgency_class": "INFO",
+            "guidance_summary": "Verify ACP certification is current and valid.",
+            "guidance_steps": [
+                "Check ACP certification expiry date",
+                "Renew before expiration if applicable",
+                "Submit updated certificate to HR",
+            ],
+        },
+        {
+            "id": "VAC",
+            "label": "Vacation",
+            "description": "Vacation requested and approved. Yearly vacation status.",
+            "urgency_class": "INFO",
+            "guidance_summary": "Ensure yearly vacation has been requested and approved.",
+            "guidance_steps": [
+                "Review vacation entitlement",
+                "Submit vacation requests through the portal",
+                "Confirm approval with supervisor",
+            ],
+        },
+        {
+            "id": "MEALS",
+            "label": "Missed Meals",
+            "description": "Missed Meal Claims outstanding.",
+            "urgency_class": "INFO",
+            "guidance_summary": "Submit any outstanding missed meal claims.",
+            "guidance_steps": [
+                "Review shifts with missed meal breaks",
+                "Complete missed meal claim forms",
+                "Submit to payroll for processing",
+            ],
+        },
+        {
+            "id": "OVER",
+            "label": "Overtime Req.",
+            "description": "Overtime Requests outstanding. Overtime claims that need processing.",
+            "urgency_class": "TIME_BOUND",
+            "guidance_summary": "Submit and track outstanding overtime requests.",
+            "guidance_steps": [
+                "Review shifts with overtime worked",
+                "Complete overtime request forms",
+                "Submit for supervisor approval",
+                "Follow up on pending approvals",
             ],
         },
     ]
     db.table("form4_reference").upsert(form4_items, on_conflict="id").execute()
     print(f"  Seeded {len(form4_items)} Form4 reference items")
 
-    # ── Form4 User State (demo) ────────────────────────────
+    # ── Form4 User State (matches Rev 20260225 screenshot) ─
+    # Jordan Riley (user 001) — matches "Paramedic: ALL" view
+    jordan_id = "00000000-0000-0000-0000-000000000001"
+    alex_id = "00000000-0000-0000-0000-000000000002"
+
     form4_states = [
-        {"user_id": "00000000-0000-0000-0000-000000000001", "item_id": "ACRc", "status": "BAD", "count": 2},
-        {"user_id": "00000000-0000-0000-0000-000000000001", "item_id": "VEHi", "status": "UNKNOWN", "count": 0},
-        {"user_id": "00000000-0000-0000-0000-000000000001", "item_id": "NAR", "status": "GOOD", "count": 0},
-        {"user_id": "00000000-0000-0000-0000-000000000001", "item_id": "CEd", "status": "GOOD", "count": 12},
-        {"user_id": "00000000-0000-0000-0000-000000000001", "item_id": "UNIf", "status": "GOOD", "count": 0},
+        # Jordan — matches screenshot exactly
+        {"user_id": jordan_id, "item_id": "ACRc",    "status": "BAD",  "count": 2},
+        {"user_id": jordan_id, "item_id": "ACEr",    "status": "GOOD", "count": 0},
+        {"user_id": jordan_id, "item_id": "CERT-DL", "status": "GOOD", "count": 0},
+        {"user_id": jordan_id, "item_id": "CERT-Va", "status": "BAD",  "count": 1},
+        {"user_id": jordan_id, "item_id": "CERT-CE", "status": "GOOD", "count": 0},
+        {"user_id": jordan_id, "item_id": "UNIF",    "status": "GOOD", "count": 5},
+        {"user_id": jordan_id, "item_id": "CRIM",    "status": "GOOD", "count": 0},
+        {"user_id": jordan_id, "item_id": "ACP",     "status": "GOOD", "count": 0},
+        {"user_id": jordan_id, "item_id": "VAC",     "status": "GOOD", "count": 0},
+        {"user_id": jordan_id, "item_id": "MEALS",   "status": "GOOD", "count": 0},
+        {"user_id": jordan_id, "item_id": "OVER",    "status": "BAD",  "count": 1},
+        # Alex — all good for demo
+        {"user_id": alex_id, "item_id": "ACRc",    "status": "GOOD", "count": 0},
+        {"user_id": alex_id, "item_id": "ACEr",    "status": "GOOD", "count": 0},
+        {"user_id": alex_id, "item_id": "CERT-DL", "status": "GOOD", "count": 0},
+        {"user_id": alex_id, "item_id": "CERT-Va", "status": "GOOD", "count": 0},
+        {"user_id": alex_id, "item_id": "CERT-CE", "status": "GOOD", "count": 0},
+        {"user_id": alex_id, "item_id": "UNIF",    "status": "GOOD", "count": 3},
+        {"user_id": alex_id, "item_id": "CRIM",    "status": "GOOD", "count": 0},
+        {"user_id": alex_id, "item_id": "ACP",     "status": "GOOD", "count": 0},
+        {"user_id": alex_id, "item_id": "VAC",     "status": "GOOD", "count": 0},
+        {"user_id": alex_id, "item_id": "MEALS",   "status": "GOOD", "count": 0},
+        {"user_id": alex_id, "item_id": "OVER",    "status": "GOOD", "count": 0},
     ]
     db.table("form4_user_state").upsert(form4_states, on_conflict="user_id,item_id").execute()
     print(f"  Seeded {len(form4_states)} Form4 user states")

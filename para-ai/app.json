@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "Para AI",
+    "slug": "paraai",
+    "version": "1.0.0",
+    "scheme": "paraai",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a6fbd"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.paraai.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Para AI needs microphone access for voice commands and audio messages."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "backgroundColor": "#0a6fbd"
+      },
+      "package": "com.paraai.app",
+      "permissions": ["RECORD_AUDIO"]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Para AI needs microphone access for voice commands and audio messages."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

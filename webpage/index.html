@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paramedic AI Assistant</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; height: 100vh; display: flex; flex-direction: column; }
+
+        /* Header */
+        .header { background: #1e293b; padding: 16px 24px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #334155; }
+        .header .logo { width: 36px; height: 36px; background: #3b82f6; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .header h1 { font-size: 18px; font-weight: 600; }
+        .header .status { margin-left: auto; font-size: 13px; padding: 4px 12px; border-radius: 20px; }
+        .status.connected { background: #064e3b; color: #6ee7b7; }
+        .status.disconnected { background: #7f1d1d; color: #fca5a5; }
+        .status.connecting { background: #78350f; color: #fcd34d; }
+
+        /* Login */
+        .login-screen { flex: 1; display: flex; align-items: center; justify-content: center; }
+        .login-card { background: #1e293b; border-radius: 16px; padding: 40px; width: 380px; border: 1px solid #334155; }
+        .login-card h2 { margin-bottom: 24px; font-size: 22px; text-align: center; }
+        .login-card label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; margin-top: 16px; }
+        .login-card input, .login-card select { width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: 15px; outline: none; }
+        .login-card input:focus, .login-card select:focus { border-color: #3b82f6; }
+        .login-card button { width: 100%; margin-top: 24px; padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; }
+        .login-card button:hover { background: #2563eb; }
+        .login-card .error { color: #fca5a5; font-size: 13px; margin-top: 12px; text-align: center; }
+        .quick-login { display: flex; gap: 8px; margin-top: 16px; }
+        .quick-login button { flex: 1; padding: 8px; background: #334155; font-size: 12px; font-weight: 500; }
+        .quick-login button:hover { background: #475569; }
+
+        /* Chat */
+        .chat-container { flex: 1; display: flex; flex-direction: column; display: none; }
+        .messages { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 12px; }
+        .msg { max-width: 75%; padding: 12px 16px; border-radius: 16px; font-size: 15px; line-height: 1.5; word-wrap: break-word; }
+        .msg.ai { background: #1e293b; border: 1px solid #334155; align-self: flex-start; border-bottom-left-radius: 4px; }
+        .msg.user { background: #3b82f6; align-self: flex-end; border-bottom-right-radius: 4px; }
+        .msg.error { background: #7f1d1d; border: 1px solid #991b1b; align-self: flex-start; }
+        .msg .action-badge { display: inline-block; margin-top: 8px; padding: 2px 8px; background: #334155; border-radius: 4px; font-size: 11px; color: #94a3b8; }
+        .msg .data-preview { margin-top: 8px; padding: 8px; background: #0f172a; border-radius: 6px; font-size: 12px; font-family: monospace; max-height: 150px; overflow-y: auto; white-space: pre-wrap; color: #94a3b8; }
+        .msg .transcript { font-size: 12px; color: #94a3b8; margin-bottom: 4px; font-style: italic; }
+        .typing { align-self: flex-start; color: #64748b; font-size: 14px; padding: 8px 16px; }
+        .typing::after { content: '...'; animation: dots 1.5s infinite; }
+        @keyframes dots { 0%, 20% { content: '.'; } 40% { content: '..'; } 60%, 100% { content: '...'; } }
+
+        /* Input */
+        .input-bar { background: #1e293b; padding: 16px 24px; border-top: 1px solid #334155; display: flex; gap: 10px; align-items: center; }
+        .input-bar input { flex: 1; padding: 12px 16px; background: #0f172a; border: 1px solid #334155; border-radius: 12px; color: #e2e8f0; font-size: 15px; outline: none; }
+        .input-bar input:focus { border-color: #3b82f6; }
+        .input-bar button { width: 44px; height: 44px; border-radius: 12px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .btn-send { background: #3b82f6; color: white; }
+        .btn-send:hover { background: #2563eb; }
+        .btn-send:disabled { background: #334155; cursor: not-allowed; }
+        .btn-mic { background: #334155; color: #e2e8f0; transition: all 0.2s; }
+        .btn-mic:hover { background: #475569; }
+        .btn-mic.recording { background: #dc2626; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+        .btn-logout { background: none; border: none; color: #64748b; cursor: pointer; font-size: 13px; margin-left: 8px; }
+        .btn-logout:hover { color: #e2e8f0; }
+
+        /* Live Voice */
+        .btn-voice { background: #7c3aed; color: white; transition: all 0.2s; }
+        .btn-voice:hover { background: #6d28d9; }
+        .btn-voice.active { background: #a855f7; }
+        .voice-bar { background: #1e293b; padding: 16px 24px; border-top: 1px solid #334155; display: none; align-items: center; justify-content: center; gap: 16px; }
+        .voice-indicator { width: 16px; height: 16px; border-radius: 50%; background: #3b82f6; flex-shrink: 0; animation: vpulse 1.5s infinite; }
+        .voice-indicator.listening { background: #3b82f6; }
+        .voice-indicator.speaking { background: #22c55e; }
+        .voice-indicator.processing { background: #eab308; }
+        .voice-indicator.ai-speaking { background: #a855f7; }
+        @keyframes vpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.5); } 50% { box-shadow: 0 0 0 8px rgba(99,102,241,0); } }
+        .voice-state-text { font-size: 14px; color: #94a3b8; min-width: 120px; text-align: center; }
+        .btn-end-voice { padding: 8px 20px; background: #dc2626; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+        .btn-end-voice:hover { background: #b91c1c; }
+        .msg.system { background: none; color: #64748b; font-size: 13px; align-self: center; font-style: italic; }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+    <div class="logo">P</div>
+    <h1>Paramedic AI Assistant</h1>
+    <span id="status" class="status disconnected">Offline</span>
+    <button id="logoutBtn" class="btn-logout" style="display:none" onclick="logout()">Logout</button>
+</div>
+
+<!-- Login Screen -->
+<div id="loginScreen" class="login-screen">
+    <div class="login-card">
+        <h2>Sign In</h2>
+        <label>Login Type</label>
+        <select id="loginType" onchange="toggleLoginFields()">
+            <option value="badge">Badge Number</option>
+            <option value="email">Email</option>
+        </select>
+        <div id="badgeField">
+            <label>Badge Number</label>
+            <input id="badge" type="text" placeholder="e.g. B-3047">
+        </div>
+        <div id="emailField" style="display:none">
+            <label>Email</label>
+            <input id="email" type="email" placeholder="e.g. chief@EffectiveAl.net">
+        </div>
+        <label>Password</label>
+        <input id="password" type="password" placeholder="Password">
+        <button onclick="doLogin()">Connect</button>
+        <div id="loginError" class="error"></div>
+        <div class="quick-login">
+            <button onclick="quickLogin('paramedic1')">Jordan (Medic)</button>
+            <button onclick="quickLogin('paramedic2')">Alex (Medic)</button>
+            <button onclick="quickLogin('supervisor')">Sam (Chief)</button>
+        </div>
+    </div>
+</div>
+
+<!-- Chat Screen -->
+<div id="chatScreen" class="chat-container">
+    <div id="messages" class="messages"></div>
+    <div id="inputBar" class="input-bar">
+        <button id="micBtn" class="btn-mic" onclick="toggleRecording()" title="Hold to talk">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </button>
+        <button id="voiceBtn" class="btn-mic btn-voice" onclick="toggleVoiceMode()" title="Live Voice">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><circle cx="12" cy="12" r="10"/></svg>
+        </button>
+        <input id="textInput" type="text" placeholder="Type a message..." onkeydown="if(event.key==='Enter')sendText()">
+        <button id="sendBtn" class="btn-send" onclick="sendText()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+    </div>
+    <div id="voiceBar" class="voice-bar">
+        <div id="voiceIndicator" class="voice-indicator listening"></div>
+        <span id="voiceStateText" class="voice-state-text">Listening...</span>
+        <button class="btn-end-voice" onclick="toggleVoiceMode()">End Voice</button>
+    </div>
+</div>
+
+<script>
+const API = 'http://127.0.0.1:8000';
+const WS_URL = 'ws://127.0.0.1:8000/agent/chat';
+
+let token = null;
+let ws = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
+
+// ── Login ────────────────────────────────────────────────────
+
+function toggleLoginFields() {
+    const type = document.getElementById('loginType').value;
+    document.getElementById('badgeField').style.display = type === 'badge' ? 'block' : 'none';
+    document.getElementById('emailField').style.display = type === 'email' ? 'block' : 'none';
+}
+
+async function doLogin() {
+    const type = document.getElementById('loginType').value;
+    const password = document.getElementById('password').value;
+    const body = { password };
+
+    if (type === 'badge') {
+        body.badge_number = document.getElementById('badge').value;
+    } else {
+        body.email = document.getElementById('email').value;
+    }
+
+    try {
+        const res = await fetch(`${API}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        token = data.access_token;
+        document.getElementById('loginError').textContent = '';
+        connectWS();
+    } catch (e) {
+        document.getElementById('loginError').textContent = e.message;
+    }
+}
+
+function quickLogin(type) {
+    if (type === 'paramedic1') {
+        document.getElementById('loginType').value = 'badge';
+        toggleLoginFields();
+        document.getElementById('badge').value = 'B-3047';
+        document.getElementById('password').value = 'medic123';
+    } else if (type === 'paramedic2') {
+        document.getElementById('loginType').value = 'badge';
+        toggleLoginFields();
+        document.getElementById('badge').value = 'B-2198';
+        document.getElementById('password').value = 'medic123';
+    } else if (type === 'supervisor') {
+        document.getElementById('loginType').value = 'email';
+        toggleLoginFields();
+        document.getElementById('email').value = 'chief@EffectiveAl.net';
+        document.getElementById('password').value = 'super123';
+    }
+    doLogin();
+}
+
+function logout() {
+    if (voiceMode) stopVoiceMode();
+    if (ws) { ws.close(); ws = null; }
+    token = null;
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('chatScreen').style.display = 'none';
+    document.getElementById('logoutBtn').style.display = 'none';
+    document.getElementById('messages').innerHTML = '';
+    setStatus('disconnected', 'Offline');
+}
+
+// ── WebSocket ────────────────────────────────────────────────
+
+function connectWS() {
+    setStatus('connecting', 'Connecting...');
+    ws = new WebSocket(`${WS_URL}?token=${token}`);
+
+    ws.onopen = () => {
+        setStatus('connected', 'Connected');
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('chatScreen').style.display = 'flex';
+        document.getElementById('logoutBtn').style.display = 'inline';
+        document.getElementById('textInput').focus();
+    };
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        removeTyping();
+
+        if (data.type === 'error') {
+            addMessage(data.content, 'error');
+            if (voiceMode) {
+                voiceState = 'listening';
+                setVoiceState('listening');
+            }
+        } else {
+            addMessage(data.content, 'ai', data.action, data.data);
+            if (data.audio) {
+                if (voiceMode) {
+                    voiceState = 'ai-speaking';
+                    setVoiceState('ai-speaking');
+                    voiceAudioEl = new Audio(`data:audio/${data.audio_format || 'mp3'};base64,${data.audio}`);
+                    voiceAudioEl.onended = () => {
+                        voiceAudioEl = null;
+                        voiceState = 'listening';
+                        setVoiceState('listening');
+                        isSpeaking = false;
+                        speechStartTime = 0;
+                        silenceStartTime = 0;
+                    };
+                    voiceAudioEl.play().catch(e => console.warn('Audio playback failed:', e));
+                } else {
+                    playAudio(data.audio, data.audio_format || 'mp3');
+                }
+            } else if (voiceMode) {
+                voiceState = 'listening';
+                setVoiceState('listening');
+            }
+        }
+    };
+
+    ws.onclose = () => {
+        setStatus('disconnected', 'Disconnected');
+    };
+
+    ws.onerror = () => {
+        setStatus('disconnected', 'Error');
+    };
+}
+
+// ── Messaging ────────────────────────────────────────────────
+
+function sendText() {
+    const input = document.getElementById('textInput');
+    const text = input.value.trim();
+    if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+    addMessage(text, 'user');
+    ws.send(JSON.stringify({ type: 'text', content: text }));
+    input.value = '';
+    showTyping();
+}
+
+function addMessage(content, type, action, data) {
+    const div = document.createElement('div');
+    div.className = `msg ${type}`;
+
+    let html = content.replace(/\n/g, '<br>');
+
+    if (action) {
+        html += `<div class="action-badge">${action}</div>`;
+    }
+    if (data && typeof data === 'object' && Object.keys(data).length > 0) {
+        html += `<div class="data-preview">${JSON.stringify(data, null, 2)}</div>`;
+    }
+
+    div.innerHTML = html;
+    const container = document.getElementById('messages');
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+function showTyping() {
+    if (document.querySelector('.typing')) return;
+    const div = document.createElement('div');
+    div.className = 'typing';
+    div.textContent = 'Thinking';
+    document.getElementById('messages').appendChild(div);
+    document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+}
+
+function removeTyping() {
+    document.querySelectorAll('.typing').forEach(el => el.remove());
+}
+
+function setStatus(cls, text) {
+    const el = document.getElementById('status');
+    el.className = `status ${cls}`;
+    el.textContent = text;
+}
+
+// ── Voice Recording (push-to-talk) ───────────────────────────
+
+async function toggleRecording() {
+    if (isRecording) {
+        stopRecording();
+    } else {
+        await startRecording();
+    }
+}
+
+async function startRecording() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            const blob = new Blob(audioChunks, { type: 'audio/webm' });
+            const reader = new FileReader();
+            reader.onload = () => {
+                const base64 = reader.result.split(',')[1];
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    addMessage('[Voice message sent]', 'user');
+                    ws.send(JSON.stringify({
+                        type: 'audio',
+                        content: base64,
+                        respond_audio: true,
+                    }));
+                    showTyping();
+                }
+            };
+            reader.readAsDataURL(blob);
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        document.getElementById('micBtn').classList.add('recording');
+    } catch (e) {
+        alert('Microphone access denied: ' + e.message);
+    }
+}
+
+function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+    }
+    isRecording = false;
+    document.getElementById('micBtn').classList.remove('recording');
+}
+
+// ── Audio Playback ───────────────────────────────────────────
+
+function playAudio(base64, format) {
+    const audio = new Audio(`data:audio/${format};base64,${base64}`);
+    audio.play().catch(e => console.warn('Audio playback failed:', e));
+}
+
+// ── Live Voice Mode (VAD + record-send-play) ─────────────────
+
+let voiceMode = false;
+let voiceAudioContext = null;
+let micStream = null;
+let voiceAnalyser = null;
+let voiceMediaRecorder = null;
+let voiceRecordChunks = [];
+let vadInterval = null;
+let speechStartTime = 0;
+let silenceStartTime = 0;
+let isSpeaking = false;
+let voiceAudioEl = null;
+let voiceState = 'listening';
+
+function toggleVoiceMode() {
+    if (voiceMode) {
+        stopVoiceMode();
+    } else {
+        startVoiceMode();
+    }
+}
+
+async function startVoiceMode() {
+    if (!token) return;
+    if (isRecording) stopRecording();
+
+    try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        voiceAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = voiceAudioContext.createMediaStreamSource(micStream);
+        voiceAnalyser = voiceAudioContext.createAnalyser();
+        voiceAnalyser.fftSize = 512;
+        source.connect(voiceAnalyser);
+
+        voiceMode = true;
+        isSpeaking = false;
+        speechStartTime = 0;
+        silenceStartTime = 0;
+        voiceState = 'listening';
+
+        vadInterval = setInterval(checkVAD, 100);
+
+        updateVoiceUI(true);
+        setVoiceState('listening');
+        addMessage('Live voice mode started', 'system');
+    } catch (e) {
+        alert('Microphone access denied: ' + e.message);
+    }
+}
+
+function stopVoiceMode() {
+    voiceMode = false;
+
+    if (vadInterval) { clearInterval(vadInterval); vadInterval = null; }
+    if (voiceMediaRecorder && voiceMediaRecorder.state === 'recording') {
+        voiceMediaRecorder.stop();
+    }
+    voiceMediaRecorder = null;
+    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    if (voiceAudioContext) { voiceAudioContext.close().catch(() => {}); voiceAudioContext = null; }
+    voiceAnalyser = null;
+    if (voiceAudioEl) { voiceAudioEl.pause(); voiceAudioEl = null; }
+
+    updateVoiceUI(false);
+    addMessage('Live voice mode ended', 'system');
+}
+
+// ── Client-Side VAD (silence detection) ──────────────────────
+
+function checkVAD() {
+    if (!voiceAnalyser || voiceState === 'processing' || voiceState === 'ai-speaking') return;
+
+    const data = new Uint8Array(voiceAnalyser.frequencyBinCount);
+    voiceAnalyser.getByteFrequencyData(data);
+
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+    const rms = Math.sqrt(sum / data.length);
+
+    const threshold = 15;
+    const now = Date.now();
+
+    if (rms > threshold) {
+        silenceStartTime = 0;
+        if (!isSpeaking) {
+            if (!speechStartTime) {
+                speechStartTime = now;
+            } else if (now - speechStartTime > 200) {
+                isSpeaking = true;
+                setVoiceState('speaking');
+                startVoiceRecorder();
+            }
+        }
+    } else {
+        speechStartTime = 0;
+        if (isSpeaking) {
+            if (!silenceStartTime) {
+                silenceStartTime = now;
+            } else if (now - silenceStartTime > 1500) {
+                isSpeaking = false;
+                stopVoiceRecorder();
+            }
+        }
+    }
+}
+
+function startVoiceRecorder() {
+    if (!micStream) return;
+    voiceRecordChunks = [];
+    voiceMediaRecorder = new MediaRecorder(micStream, { mimeType: 'audio/webm;codecs=opus' });
+
+    voiceMediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) voiceRecordChunks.push(e.data);
+    };
+
+    voiceMediaRecorder.onstop = () => {
+        const blob = new Blob(voiceRecordChunks, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onload = () => {
+            const base64 = reader.result.split(',')[1];
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                addMessage('[Voice message]', 'user');
+                ws.send(JSON.stringify({
+                    type: 'audio',
+                    content: base64,
+                    respond_audio: true,
+                }));
+                voiceState = 'processing';
+                setVoiceState('processing');
+                showTyping();
+            }
+        };
+        reader.readAsDataURL(blob);
+    };
+
+    voiceMediaRecorder.start();
+}
+
+function stopVoiceRecorder() {
+    if (voiceMediaRecorder && voiceMediaRecorder.state === 'recording') {
+        voiceMediaRecorder.stop();
+    }
+}
+
+// ── Voice UI Helpers ──────────────────────────────────────────
+
+function updateVoiceUI(active) {
+    document.getElementById('inputBar').style.display = active ? 'none' : 'flex';
+    document.getElementById('voiceBar').style.display = active ? 'flex' : 'none';
+    document.getElementById('voiceBtn').classList.toggle('active', active);
+}
+
+function setVoiceState(state) {
+    const indicator = document.getElementById('voiceIndicator');
+    const text = document.getElementById('voiceStateText');
+    indicator.className = 'voice-indicator ' + state;
+
+    const labels = {
+        listening: 'Listening...',
+        speaking: "You're speaking...",
+        processing: 'Processing...',
+        'ai-speaking': 'AI speaking...',
+    };
+    text.textContent = labels[state] || state;
+}
+</script>
+
+</body>
+</html>

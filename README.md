@@ -2,7 +2,7 @@
 
 An AI-powered assistant that automates EMS documentation through conversational AI. Paramedics interact via voice or text to fill occurrence reports, track teddy bear distributions, manage compliance checklists, and get shift briefings — all hands-free.
 
-Built for the EAI Ambulance Service hackathon (March 2-4, 2026).
+
 
 ## Architecture
 

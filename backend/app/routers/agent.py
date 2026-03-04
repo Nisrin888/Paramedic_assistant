@@ -1,15 +1,19 @@
 """
 WebSocket endpoint for real-time AI conversation.
+
+Uses LangGraph for stateful, checkpointed conversation management.
 """
 import json
 import logging
 import traceback
+import uuid
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from jose import jwt, JWTError
+from langchain_core.messages import HumanMessage
 
 from app.config import get_settings
 from app.database import get_supabase
-from app.agents.orchestrator import OrchestratorSession
+from app.agents.graph import get_graph
 from app.services.voice_service import speech_to_text_base64, text_to_speech_base64
 
 logger = logging.getLogger(__name__)
@@ -105,21 +109,14 @@ async def agent_chat(websocket: WebSocket):
         await websocket.close(code=4001)
         return
 
-    session = OrchestratorSession(user_context)
+    # Get the compiled LangGraph
+    compiled_graph = await get_graph()
 
-    # Send welcome
-    name = user_context.get("preferred_name") or user_context.get("first_name", "there")
-    role = user_context.get("role_type", "Paramedic")
-    if role == "Supervisor":
-        welcome = f"Hello {name}! I'm your Paramedic AI Assistant — Supervisor Dashboard. You can ask me about your team's reports, compliance status, shift summaries, or insights. How can I help?"
-    else:
-        welcome = f"Hey {name}! I'm your Paramedic AI Assistant. How can I help you today?"
-    await websocket.send_json({
-        "type": "text",
-        "content": welcome,
-        "action": None,
-        "data": None,
-    })
+    # Thread ID for checkpointing — same user gets same thread across reconnects
+    user_id = user_context["user_id"]
+    thread_id = f"{user_id}:agent"
+
+    # No welcome message — user texts first
 
     try:
         while True:
@@ -132,7 +129,8 @@ async def agent_chat(websocket: WebSocket):
             # Handle audio input — STT first
             if msg_type == "audio":
                 try:
-                    content = await speech_to_text_base64(content)
+                    audio_ext = data.get("format", "m4a")
+                    content = await speech_to_text_base64(content, filename=f"audio.{audio_ext}")
                     print(f"[WS] STT transcript: {content[:100]}")
                 except Exception as e:
                     print(f"[WS] STT failed: {e}")
@@ -149,27 +147,39 @@ async def agent_chat(websocket: WebSocket):
             want_audio = data.get("respond_audio", msg_type == "audio")
             voice_pref = user_context.get("voice_preference", "Female")
 
-            # Process through orchestrator
+            # Process through LangGraph
             try:
-                result = await session.handle_message(content)
+                config = {"configurable": {"thread_id": thread_id}}
+                result = await compiled_graph.ainvoke(
+                    {
+                        "messages": [HumanMessage(content=content)],
+                        "user_context": user_context,
+                    },
+                    config,
+                )
+
+                # Extract the last AI message content
+                last_msg = result["messages"][-1]
+                ai_text = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+
                 response = {
                     "type": "text",
-                    "content": result["text"],
+                    "content": ai_text,
                     "action": result.get("action"),
-                    "data": result.get("data"),
+                    "data": result.get("action_data"),
                 }
 
                 # Generate TTS if client wants audio back
-                if want_audio and result["text"]:
+                if want_audio and ai_text:
                     try:
-                        audio_b64 = await text_to_speech_base64(result["text"], voice_pref)
+                        audio_b64 = await text_to_speech_base64(ai_text, voice_pref)
                         response["audio"] = audio_b64
                         response["audio_format"] = "mp3"
                     except Exception as e:
                         print(f"[WS] TTS failed: {e}")
 
             except Exception as e:
-                logger.error(f"Orchestrator error: {traceback.format_exc()}")
+                logger.error(f"LangGraph error: {traceback.format_exc()}")
                 response = {
                     "type": "error",
                     "content": f"Sorry, something went wrong: {e}",

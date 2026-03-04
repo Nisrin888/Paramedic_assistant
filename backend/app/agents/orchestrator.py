@@ -38,7 +38,11 @@ from app.agents.supervisor_agent import (
 
 
 def _get_client() -> AsyncOpenAI:
-    return AsyncOpenAI(api_key=get_settings().openai_api_key)
+    settings = get_settings()
+    kwargs = {"api_key": settings.openrouter_api_key}
+    if settings.openrouter_api_base:
+        kwargs["base_url"] = settings.openrouter_api_base
+    return AsyncOpenAI(**kwargs)
 
 
 def _build_system_prompt(user_context: dict, form_session: FormSession | None) -> str:
@@ -133,6 +137,7 @@ class OrchestratorSession:
         self.last_submitted_id: str | None = None
         self.last_submitted_type: str | None = None
         self.client = _get_client()
+        self.model = get_settings().llm_model
         self.role = user_context.get("role_type", "Paramedic")
         self.audit = AuditLogger(user_context["user_id"])
         self.audit.log_session_start(self.role, {
@@ -169,7 +174,7 @@ class OrchestratorSession:
         try:
             print(f"[ORCH] Calling GPT-4o with {len(self.messages)} messages...")
             response = await self.client.chat.completions.create(
-                model="gpt-4o",
+                model=self.model,
                 messages=[{"role": "system", "content": system_prompt}] + self.messages,
                 tools=tools,
                 tool_choice="auto",
@@ -253,7 +258,7 @@ class OrchestratorSession:
             try:
                 print(f"[ORCH] Calling GPT-4o follow-up with {len(self.messages)} messages...")
                 follow_up = await self.client.chat.completions.create(
-                    model="gpt-4o",
+                    model=self.model,
                     messages=[{"role": "system", "content": system_prompt}] + self.messages,
                 )
                 assistant_text = follow_up.choices[0].message.content or ""

@@ -1,6 +1,7 @@
-# Environment
-backend/.env
+# Environment / Secrets
 .env
+backend/.env
+para-ai/.env
 
 # Python
 __pycache__/
@@ -30,9 +31,27 @@ Thumbs.db
 # Claude Code
 .claude/
 
-# Test files
-backend/test_*.py
-
-# Node (frontend)
+# Node / Expo
 node_modules/
 .expo/
+para-ai/node_modules/
+para-ai/.expo/
+
+# Expo build artifacts
+*.tsbuildinfo
+expo-env.d.ts
+para-ai/android/
+para-ai/ios/
+
+# Test files
+backend/test_*.py
+backend/tests/
+backend/pytest.ini
+
+# Images / media (not needed in repo)
+backend/pictures/
+
+# Scaffold / leftover
+para-ai/paraai-sdk54/
+para-ai/login.html
+para-ai/.mcp.json
